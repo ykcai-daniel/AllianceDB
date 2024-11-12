@@ -235,9 +235,11 @@ function ResetParameters() {
   sed -i -e "s/NUM_RADIX_BITS [[:alnum:]]*/NUM_RADIX_BITS 8/g" ../joins/prj_params.h
 }
 
+
 #################################################
 ####### Config shj source file dependency #######
 #################################################
+
 
 function PARTITION_ONLY() {
   sed -i -e "s/#define JOIN/#define NO_JOIN/g" ../joins/common_functions.h
@@ -278,6 +280,7 @@ function ALL_ON() {
   sed -i -e "s/#define NO_WAIT/#define WAIT/g" ../joins/common_functions.h
   sed -i -e "s/#define NO_OVERVIEW/#define OVERVIEW/g" ../joins/common_functions.h
 }
+
 
 function NORMAL() {
   sed -i -e "s/#define NO_TIMING/#define TIMING/g" ../joins/common_functions.h #disable time measurement
@@ -347,7 +350,6 @@ function RUNALLMic() {
   fi
 }
 
-# comment these out after compiled
 # ALL_ON
 # compile=1
 # compile
@@ -877,3 +879,4 @@ fi
 bash draw.sh
 python3 jobdone.py
 echo "SHJ Experiments All Done"
+

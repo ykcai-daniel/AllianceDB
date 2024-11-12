@@ -10,15 +10,16 @@
 #include <mutex>
 #include "npj_types.h"
 #include "../timer/t_timer.h"
+#include "batcher.h"
 
 // path of experiment dir, all results will dump to here.
-#define EXP_DIR "/data1/xtra"
+#define EXP_DIR "./data1/xtra"
 
 //#define DEBUG
 //#define JOIN_RESULT_MATERIALIZE
 
 // used for enabling pcm profiling
-#define NO_TIMING
+#define TIMING
 #define JOIN
 #define MERGE
 #define MATCH
@@ -26,11 +27,11 @@
 #define OVERVIEW // enable overview profiling
 
 // used for perf events counters
-#define PROFILE_TOPDOWN
+#define NO_PROFILE_TOPDOWN
 #define JOIN_THREAD
 
 // used for memory consumption profiling
-#define PROFILE_MEMORY_CONSUMPTION
+#define NO_PROFILE_MEMORY_CONSUMPTION
 
 #define EAGER //disable when profiling.
 
@@ -126,6 +127,8 @@ void allocate_hashtable(hashtable_t **ppht, uint32_t nbuckets);
 void
 build_hashtable_st(hashtable_t *ht, relation_t *rel);
 
+void build_hashtable_batched(const hashtable_t *ht, const Batch& batch,const uint32_t hashmask, const uint32_t skipbits);
+
 /**
  * Probes the hashtable for the given outer relation, returns num results.
  * This probing method is used for both single and multi-threaded version.
@@ -138,6 +141,9 @@ build_hashtable_st(hashtable_t *ht, relation_t *rel);
  */
 int64_t
 probe_hashtable(hashtable_t *ht, relation_t *rel, void *output, T_TIMER *timer);
+
+int64_t probe_hashtable_batched(const hashtable_t *ht, const Batch& batch, const uint32_t hashmask, const uint32_t skipbits, int64_t *matches,
+T_TIMER *timer, bool ISTupleR, void *output);
 
 
 /**
