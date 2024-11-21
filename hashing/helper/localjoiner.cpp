@@ -141,9 +141,9 @@ void SHJJoiner::join_batched(int32_t tid, Batch* batch, bool ISTupleR, int64_t *
 #ifndef USE_CUSTOME_HASHTABLE
     if(ISTupleR){
         for(int i=0;i<batch->size();i++){
-            htR.insert({batch->keys_[i],tuple_t{batch->values_[i],batch->keys_[i]}});
+            htR.insert({batch->keys_[0][i],tuple_t{batch->values_[0][i],batch->keys_[0][i]}});
             // probe
-            auto [equal_begin,equal_end]=htL.equal_range(batch->keys_[i]);
+            auto [equal_begin,equal_end]=htL.equal_range(batch->keys_[0][i]);
             for(auto cur=equal_begin;cur!=equal_end;cur++){
                 (*matches)++;
 #ifdef JOIN_RESULT_MATERIALIZE
@@ -158,8 +158,8 @@ void SHJJoiner::join_batched(int32_t tid, Batch* batch, bool ISTupleR, int64_t *
     }
     else{
         for(int i=0;i<batch->size();i++){
-            htL.insert({batch->keys_[i],tuple_t{batch->values_[i],batch->keys_[i]}});
-            auto [equal_begin,equal_end]=htR.equal_range(batch->keys_[i]);
+            htL.insert({batch->keys_[0][i],tuple_t{batch->values_[0][i],batch->keys_[0][i]}});
+            auto [equal_begin,equal_end]=htR.equal_range(batch->keys_[0][i]);
             for(auto cur=equal_begin;cur!=equal_end;cur++){
                 (*matches)++;
 #ifdef JOIN_RESULT_MATERIALIZE

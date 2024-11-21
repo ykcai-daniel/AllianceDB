@@ -35,6 +35,7 @@ struct arg_t {
     relation_t* relation_right;
     SHJShuffleQueueGroup* left_group_shared_ptr;
     SHJShuffleQueueGroup* right_group_shared_ptr;
+    Batch::BatchMemoryPool* pool_ptr;
 
 
 

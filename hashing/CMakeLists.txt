@@ -60,7 +60,10 @@ ADD_LIBRARY(common OBJECT utils/xxhash64.h timer/t_timer.h timer/t_timer.cpp ben
         joins/npj_types.h joins/npj_params.h joins/no_partitioning_join.cpp joins/no_partitioning_join.h joins/onlinejoins.cpp joins/onlinejoins.h
 
         joins/parallel_radix_join.cpp joins/parallel_radix_join.h joins/prj_params.h joins/common_functions.cpp joins/common_functions.h helper/launcher.cpp helper/launcher.h helper/thread_task.cpp helper/thread_task.h helper/localjoiner.cpp helper/localjoiner.h helper/shuffler.cpp helper/shuffler.h helper/fetcher.cpp helper/fetcher.h joins/eagerjoin_struct.h lib/types.h lib/pci.h lib/msr.h lib/msr.cpp lib/cpucounters.cpp lib/cpucounters.h lib/utils.cpp lib/utils.h lib/client_bw.cpp lib/client_bw.h lib/mmio.cpp lib/mmio.h lib/width_extender.h lib/mutex.h lib/exceptions/unsupported_processor_exception.hpp lib/pci.cpp lib/topology.cpp lib/topology.h lib/threadpool.h lib/threadpool.cpp lib/debug.h lib/debug.cpp helper/concurrentqueue.h helper/maps/robin_growth_policy.h helper/maps/robin_hash.h helper/maps/robin_map.h helper/maps/robin_set.h helper/readerwriterqueue.h helper/atomicops.h helper/sort_common.cpp helper/sort_common.h
-        helper/pmj_helper.cpp helper/pmj_helper.h  utils/skewness.h utils/tuple_buffer.h utils/machine.h)
+        helper/pmj_helper.cpp helper/pmj_helper.h  utils/skewness.h utils/tuple_buffer.h utils/machine.h
+        joins/memory_pool.h
+        joins/onlinejoins.cpp
+)
 
 # Now simply link your own targets against gtest, gmock,
 # etc. as appropriate

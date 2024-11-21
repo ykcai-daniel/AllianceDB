@@ -8,6 +8,7 @@
 #include "concurrentqueue.h"
 #include "maps/robin_map.h"
 #include "readerwriterqueue.h"
+#include "../joins/batcher.h"
 #include <list>
 #include <optional>
 class baseShuffler {
@@ -118,6 +119,8 @@ private:
     // number of tuples a thread will fetch for a given index
     int thread_range=4096*8;
     // size of a batch (for a given index, thread_range/vector_batch_size batches will be generated)
+    Batch::BatchMemoryPool* pool_ptr_;
+
     Batch tmp_batch;
 
     // current thread id
@@ -139,7 +142,13 @@ private:
         cur_batch_end=min(cur_batch_loc+thread_range,(int)relation->num_tuples);
     }
 public:
-    explicit SHJRoundRobinFetcher(int thread_id,int thread_cnt,relation_t* relation,uint64_t fetch_start_time):thread_id(thread_id),thread_cnt(thread_cnt),relation(relation),tmp_batch(),fetchStartTime(fetch_start_time){
+    explicit SHJRoundRobinFetcher(int thread_id,int thread_cnt,relation_t* relation,uint64_t fetch_start_time, Batch::BatchMemoryPool* pool_ptr):
+    thread_id(thread_id),
+    thread_cnt(thread_cnt),
+    relation(relation),
+    pool_ptr_(pool_ptr),
+    tmp_batch(pool_ptr),
+    fetchStartTime(fetch_start_time){
         index=0;
         set_index(index);
     }
@@ -184,22 +193,32 @@ class SHJShuffleQueueGroup{
 private:
     uint32_t thread_cnt;
     vector<moodycamel::ConcurrentQueue<Batch>> queues;
+    vector<Batch::BatchMemoryPool*> memory_pool_ptrs_;
     atomic<int> done_cnt;
 
 
 public:
-    explicit SHJShuffleQueueGroup(uint32_t thread_cnt):thread_cnt(thread_cnt){
+    explicit SHJShuffleQueueGroup(uint32_t thread_cnt, vector<Batch::BatchMemoryPool>& memory_pools):thread_cnt(thread_cnt){
+        memory_pool_ptrs_.reserve(thread_cnt);
+        for(int i=0;i<thread_cnt;i++){
+            memory_pool_ptrs_.push_back(&memory_pools[i]);
+        }
         done_cnt=0;
         queues.resize(thread_cnt);
     }
 
     void push_batch(Batch&& batch){
         size_t hash_loc;
-        vector<Batch> tmp_batches(thread_cnt);
+        vector<Batch> tmp_batches;
+        tmp_batches.reserve(thread_cnt);
         for(int i=0;i<batch.size();i++){
             // use naive hashing for now
-            hash_loc = batch.keys_[i] % thread_cnt;
-            tmp_batches[hash_loc].add_tuple(batch.keys_[i],batch.values_[i]);
+            tmp_batches.emplace_back(memory_pool_ptrs_[i]);
+        }
+        for(int i=0;i<batch.size();i++){
+            // use naive hashing for now
+            hash_loc = batch.keys_[0][i] % thread_cnt;
+            tmp_batches[hash_loc].add_tuple(batch.keys_[0][i],batch.values_[0][i]);
         }
         for(int i=0;i<thread_cnt;i++){
             if(tmp_batches[i].size()>0){
