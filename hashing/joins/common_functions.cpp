@@ -212,7 +212,7 @@ void build_hashtable_batched(const hashtable_t *ht, const Batch& batch,
     for(int i=0;i<batch.size();i++){
         tuple_t *dest;
         bucket_t *curr, *nxt;
-        int32_t idx = HASH(batch.keys_[0][i], hashmask, skipbits);
+        int32_t idx = HASH(batch.keys()[i], hashmask, skipbits);
 
         /* copy the tuple to appropriate hash bucket */
         /* if full, follow nxt pointer to find correct place */
@@ -240,8 +240,8 @@ void build_hashtable_batched(const hashtable_t *ht, const Batch& batch,
         }
 #endif
         }
-        dest->key=batch.keys_[0][i];
-        dest->payloadID=batch.values_[0][i];
+        dest->key=batch.keys()[i];
+        dest->payloadID=batch.values()[i];
     }
 }
 
@@ -330,17 +330,17 @@ int64_t probe_hashtable_batched(const hashtable_t *ht, const Batch& batch, const
         chainedtuplebuffer_t *chainedbuf = (chainedtuplebuffer_t *) output;
 #endif
 
-        intkey_t idx = HASH(batch.keys_[0][i], hashmask, skipbits);
+        intkey_t idx = HASH(batch.keys()[i], hashmask, skipbits);
         bucket_t *b = ht->buckets + idx;
         do {
             for (uint32_t index_ht = 0; index_ht < b->count; index_ht++) {
-                if (batch.keys_[0][i] == b->tuples[index_ht].key) {
+                if (batch.keys()[i] == b->tuples[index_ht].key) {
 #ifdef JOIN_RESULT_MATERIALIZE
                     /* copy to the result buffer */
                 /** We materialize only <S-key, S-RID> */
                 tuple_t *joinres = cb_next_writepos(chainedbuf);
                 joinres->key = batch.keys[0][i];
-                joinres->payloadID = batch.values_[0][i];
+                joinres->payloadID = batch.values()[i];
 #endif
                     (*matches)++;
 #ifdef DEBUG
@@ -355,7 +355,7 @@ int64_t probe_hashtable_batched(const hashtable_t *ht, const Batch& batch, const
 #endif
 
 #ifndef NO_TIMING
-                    END_PROGRESSIVE_MEASURE(batch.values_[0][i], timer, ISTupleR)
+                    END_PROGRESSIVE_MEASURE(batch.values()[i], timer, ISTupleR)
 #endif
                 }
             }

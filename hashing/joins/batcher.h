@@ -6,8 +6,7 @@
 class Batch{
 public:
     constexpr static int default_size=256;
-    using array_type=int32_t[default_size];
-    using BatchMemoryPool=MemoryPool<array_type ,4096>;
+    using BatchMemoryPool=MemoryPool<int32_t ,256*default_size,default_size>;
 
 private:
 
@@ -24,20 +23,20 @@ private:
 public:
 
 
-    array_type * keys_;
-    array_type * values_;
+    int32_t* keys_;
+    int32_t* values_;
 
     static inline int max_size(){
         return default_size;
     }
 
-    explicit Batch(){
-        size_=0;
-        batch_cnt_=0;
-        memory_pool_= nullptr;
-        keys_= nullptr;
-        values_= nullptr;
-    }
+//    explicit Batch(){
+//        size_=0;
+//        batch_cnt_=0;
+//        memory_pool_= nullptr;
+//        keys_= nullptr;
+//        values_= nullptr;
+//    }
 
 
     explicit Batch(BatchMemoryPool* pool_ptr):size_(0),batch_cnt_(0),memory_pool_(pool_ptr){
@@ -66,6 +65,7 @@ public:
         size_=batch.size_;
         batch.keys_= nullptr;
         batch.values_= nullptr;
+        memory_pool_=batch.memory_pool_;
         return *this;
     }
 
@@ -73,22 +73,22 @@ public:
         if(t==nullptr){
             return false;
         }
-        (*keys_)[size_]=t->key;
-        (*values_)[size_]=t->payloadID;
+        keys_[size_]=t->key;
+        values_[size_]=t->payloadID;
         size_++;
         return size_==default_size;
     }
 
     inline bool add_tuple(const tuple_t& t){
-        (*keys_)[size_]=t.key;
-        (*values_)[size_]=t.payloadID;
+        keys_[size_]=t.key;
+        values_[size_]=t.payloadID;
         size_++;
         return default_size==size_;
     }
 
     inline bool add_tuple(key_t key, value_t value){
-        (*keys_)[size_]=key;
-        (*values_)[size_]=value;
+        keys_[size_]=key;
+        values_[size_]=value;
         size_++;
         return default_size==size_;
     }
@@ -98,6 +98,16 @@ public:
         size_=0;
         keys_=memory_pool_->allocate();
         values_=memory_pool_->allocate();
+    }
+
+    __always_inline
+    key_t* keys() const{
+        return keys_;
+    }
+
+    __always_inline
+    value_t * values() const{
+        return values_;
     }
 
     inline void reset(){
@@ -111,8 +121,9 @@ public:
         return batch_cnt_;
     }
     ~Batch(){
-        memory_pool_->deallocate(keys_);
-        memory_pool_->deallocate(values_);
+        // memory pool release all memory after join end
+//        memory_pool_->deallocate(keys_);
+//        memory_pool_->deallocate(values_);
     }
 
 };

@@ -199,7 +199,6 @@ private:
 
 public:
     explicit SHJShuffleQueueGroup(uint32_t thread_cnt, vector<Batch::BatchMemoryPool>& memory_pools):thread_cnt(thread_cnt){
-        memory_pool_ptrs_.reserve(thread_cnt);
         for(int i=0;i<thread_cnt;i++){
             memory_pool_ptrs_.push_back(&memory_pools[i]);
         }
@@ -207,18 +206,18 @@ public:
         queues.resize(thread_cnt);
     }
 
-    void push_batch(Batch&& batch){
+    void push_batch(Batch&& batch,int tid){
         size_t hash_loc;
         vector<Batch> tmp_batches;
         tmp_batches.reserve(thread_cnt);
-        for(int i=0;i<batch.size();i++){
-            // use naive hashing for now
-            tmp_batches.emplace_back(memory_pool_ptrs_[i]);
+        for(int i=0;i<thread_cnt;i++){
+            // to avoid sync of memory allocation, a thread will allocate new batches in its own memory pool
+            tmp_batches.emplace_back(memory_pool_ptrs_[tid]);
         }
         for(int i=0;i<batch.size();i++){
             // use naive hashing for now
-            hash_loc = batch.keys_[0][i] % thread_cnt;
-            tmp_batches[hash_loc].add_tuple(batch.keys_[0][i],batch.values_[0][i]);
+            hash_loc = batch.keys()[i] % thread_cnt;
+            tmp_batches[hash_loc].add_tuple(batch.keys()[i],batch.values()[i]);
         }
         for(int i=0;i<thread_cnt;i++){
             if(tmp_batches[i].size()>0){
@@ -230,7 +229,7 @@ public:
 
     std::optional<Batch> pull_batch(int thread_id){
         auto& queue=queues[thread_id];
-        Batch b;
+        Batch b(memory_pool_ptrs_[thread_id]);
         bool success=queue.try_dequeue(b);
         if(success&&b.size()!=0){
             return make_optional<Batch>(std::move(b));
