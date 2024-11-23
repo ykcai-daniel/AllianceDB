@@ -152,18 +152,25 @@ function benchmarkPerfRun() {
   if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
 }
 
+export FLAME_GRAPH_DIR=FlameGraph
+
 function benchmarkFlameGraphRun() {
   echo "==benchmark:$benchmark -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt =="
   # Clear cache, avoid cache interference of previous round. Need sudo
   echo 3 >/proc/sys/vm/drop_caches
   echo "../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt"
   #perf stat -e CPU_CLK_UNHALTED.THREAD,IDQ_UOPS_NOT_DELIVERED.CORE,UOPS_ISSUED.ANY,UOPS_RETIRED.RETIRE_SLOTS,INT_MISC.RECOVERY_CYCLES,RESOURCE_STALLS.SB \
-  perf record -F 256 -g --call-graph dwarf -o ${PERF_RESULT_DIR}/${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_record_result.data  \
+  perf record -F 120 -g --call-graph dwarf -o ${PERF_RESULT_DIR}/${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_record_result.data  \
     ../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap \
     > ${PERF_RESULT_DIR}/${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_record_run_log.txt
 
-  # after obtaining the results, run the command below to dump binary stack samples
-  # perf report --stdio -n > perf_result_test.txt
+  # after obtaining the results, run the command below to dump binary stack samples into human-readable format
+  # perf report --stdio -n -i ${PERF_RESULT_DIR}/${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_record_result.data > ${PERF_RESULT_DIR}/${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_record_result_dump.txt
+
+  # use perf script to dump the binary results for flame graph visualization
+  perf script -i ${PERF_RESULT_DIR}/${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_record_result.data > ${PERF_RESULT_DIR}/__tmp__${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_script_result_dump.txt
+  ${FLAME_GRAPH_DIR}/stackcollapse-perf.pl ${PERF_RESULT_DIR}/__tmp__${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_script_result_dump.txt > ${PERF_RESULT_DIR}/__tmp__stack_fold_${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_script_result_dump.txt
+  ${FLAME_GRAPH_DIR}/flamegraph.pl ${PERF_RESULT_DIR}/__tmp__stack_fold_${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_script_result_dump.txt > ${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_flame_graph.svg
 
 
   if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
@@ -187,7 +194,7 @@ function compile() {
 }
 
 
-COMPILE_ARG=${1:-0}
+
 # {"SHJ_st",      SHJ_st}, /* Symmetric hash join single_thread*/
 # {"SHJ_JM_P",    SHJ_JM_P}, /* Symmetric hash join JM Model, Partition*/
 # {"SHJ_JM_P_BATCHED",SHJ_JM_P_BATCHED}, /* Symmetric hash join JM Model, Batched*/
@@ -198,7 +205,7 @@ COMPILE_ARG=${1:-0}
 # {"SHJ_JBCR_P",  SHJ_JBCR_P}, /* Symmetric hash join JB CountRound Model, No-Partition*/
 # {"SHJ_HS_NP",   SHJ_HS_NP}, /* Symmetric hash join HS Model, No-Partition*/
 
-
+COMPILE_ARG=${1:-0}
 # We focus on SHJ_JM_P, SHJ_JM_P_BATCHED, SHJ_Shuffle_P_BATCHED, SHJ_JB_NP
 ALGO_ARG=${2:-SHJ_Shuffle_P_BATCHED}
 THREAD_ARG=${3:-4}
@@ -211,7 +218,8 @@ ALL_ON
 compile=${COMPILE_ARG}
 compile
 ResetParameters
-SetStockParameters
+# dataset is hardcoded
+SetYSBParameters
 algo=${ALGO_ARG}
 Threads=${THREAD_ARG}
 benchmarkFlameGraphRun
