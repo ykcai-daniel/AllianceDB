@@ -1,9 +1,10 @@
 #!/bin/bash
-# a lightweighted script for runing one simple algo
+# a lightweighted debugging script for running and profiling one single algo
 # the script must be run in hashing/scripts with sudo!!!
 # ./run_algo.sh
 
 function SetStockParameters() { #matches: 15598112. #inputs= 60527 + 77227
+  DATASET_NAME=STOCK
   ts=1 # stream case
   WINDOW_SIZE=1000
   RSIZE=60527
@@ -18,6 +19,7 @@ function SetStockParameters() { #matches: 15598112. #inputs= 60527 + 77227
 }
 
 function SetRovioParameters() { #matches: 87856849382 #inputs= 2873604 + 2873604
+  DATASET_NAME=ROVIO
   ts=1 # stream case
   WINDOW_SIZE=1000
   RSIZE=2873604
@@ -32,6 +34,7 @@ function SetRovioParameters() { #matches: 87856849382 #inputs= 2873604 + 2873604
 }
 
 function SetYSBParameters() { #matches: 10000000. #inputs= 1000 + 10000000
+  DATASET_NAME=YSB
   ts=1 # stream case
   WINDOW_SIZE=1000
   RSIZE=1000
@@ -46,6 +49,7 @@ function SetYSBParameters() { #matches: 10000000. #inputs= 1000 + 10000000
 }
 
 function SetDEBSParameters() { #matches: 251033140 #inputs= 1000000 + 1000000
+  DATASET_NAME=DEBS
   ts=1 # stream case
   WINDOW_SIZE=0
   RSIZE=1000000 #1000000
@@ -141,9 +145,29 @@ function benchmarkPerfRun() {
   echo 3 >/proc/sys/vm/drop_caches
   echo "../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt"
   #perf stat -e CPU_CLK_UNHALTED.THREAD,IDQ_UOPS_NOT_DELIVERED.CORE,UOPS_ISSUED.ANY,UOPS_RETIRED.RETIRE_SLOTS,INT_MISC.RECOVERY_CYCLES,RESOURCE_STALLS.SB \
-  perf stat -e cache-misses,cycles \
-    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap
+  perf stat -d -o ${PERF_RESULT_DIR}/${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_result.txt  \
+    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap \
+    > ${PERF_RESULT_DIR}/${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_run_log.txt
+
   if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
+}
+
+function benchmarkFlameGraphRun() {
+  echo "==benchmark:$benchmark -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt =="
+  # Clear cache, avoid cache interference of previous round. Need sudo
+  echo 3 >/proc/sys/vm/drop_caches
+  echo "../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt"
+  #perf stat -e CPU_CLK_UNHALTED.THREAD,IDQ_UOPS_NOT_DELIVERED.CORE,UOPS_ISSUED.ANY,UOPS_RETIRED.RETIRE_SLOTS,INT_MISC.RECOVERY_CYCLES,RESOURCE_STALLS.SB \
+  perf record -F 256 -g --call-graph dwarf -o ${PERF_RESULT_DIR}/${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_perf_record_result.data  \
+    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap \
+    > ${PERF_RESULT_DIR}/${algo}_${DATASET_NAME}_THREAD${THREAD_ARG}_record_run_log.txt
+
+  # after obtaining the results, run the command below to dump binary stack samples
+  # perf report --stdio -n > perf_result_test.txt
+
+
+  if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
+
 }
 
 
@@ -164,10 +188,24 @@ function compile() {
 
 
 COMPILE_ARG=${1:-0}
+# {"SHJ_st",      SHJ_st}, /* Symmetric hash join single_thread*/
+# {"SHJ_JM_P",    SHJ_JM_P}, /* Symmetric hash join JM Model, Partition*/
+# {"SHJ_JM_P_BATCHED",SHJ_JM_P_BATCHED}, /* Symmetric hash join JM Model, Batched*/
+# {"SHJ_Shuffle_P_BATCHED",SHJ_Shuffle_P_BATCHED},/* Symetric hash join with hash shuffling, batched*/
+# {"SHJ_JM_NP",   SHJ_JM_NP}, /* Symmetric hash join JM Model, No-Partition*/
+# {"SHJ_JB_NP",   SHJ_JB_NP}, /* Symmetric hash join JB Model, No-Partition*/
+# {"SHJ_JBCR_NP", SHJ_JBCR_NP}, /* Symmetric hash join JB CountRound Model, No-Partition*/
+# {"SHJ_JBCR_P",  SHJ_JBCR_P}, /* Symmetric hash join JB CountRound Model, No-Partition*/
+# {"SHJ_HS_NP",   SHJ_HS_NP}, /* Symmetric hash join HS Model, No-Partition*/
+
+
+# We focus on SHJ_JM_P, SHJ_JM_P_BATCHED, SHJ_Shuffle_P_BATCHED, SHJ_JB_NP
 ALGO_ARG=${2:-SHJ_Shuffle_P_BATCHED}
 THREAD_ARG=${3:-4}
 
 echo "Compile: ${COMPILE_ARG}. Running algo: ${ALGO_ARG} with thread ${THREAD_ARG}"
+export PERF_RESULT_DIR=perf_results
+mkdir -p ${PERF_RESULT_DIR}
 
 ALL_ON
 compile=${COMPILE_ARG}
@@ -176,4 +214,4 @@ ResetParameters
 SetStockParameters
 algo=${ALGO_ARG}
 Threads=${THREAD_ARG}
-benchmarkRun
+benchmarkFlameGraphRun
