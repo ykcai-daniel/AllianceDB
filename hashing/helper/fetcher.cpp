@@ -182,9 +182,9 @@ nextTupleR(t_state* state, const uint64_t* fetchStartTime, relation_t* relR) {
             state->current_fetch.tuple = readR;
             state->current_fetch.ISTuple_R = true;
             state->current_index_R++;
-            if(state->current_index_R % 4096 == 1){
-                MSG("R Tuples fetched: %d",state->current_index_R)
-            }
+            // if(state->current_index_R % 4096 == 1){
+            //     MSG("R Tuples fetched: %d",state->current_index_R)
+            // }
             return &(state->current_fetch);
         }
 #else//return without checking for timestamp.

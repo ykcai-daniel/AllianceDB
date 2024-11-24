@@ -3,19 +3,40 @@
 # the script must be run in hashing/scripts !!!
 
 exp_dir="../../data1/xtra"
-exp_secction="MICRO_BENCH"
-# exp_secction="APP_BENCH,MICRO_BENCH,SCALE_STUDY,PROFILE_MICRO,PROFILE,PROFILE_MEMORY_CONSUMPTION,PROFILE_PMU_COUNTERS"
+exp_secction="PROFILE_MICRO"
 '''
+currently suport
 choices of experiment sections:
-APP_BENCH: run the four benchmark for SHJ_JM_NP, SHJ_JM_P, SHJ_JM_P_BATCHED
-MICRO_BENCH: run the synthetic benchmark for SHJ_JM_NP, SHJ_JM_P, SHJ_JM_P_BATCHED
-PROFILE_MEMORY_CONSUMPTION: run the four benchmark for SHJ_JM_P, SHJ_JM_P_BATCHED with memory consumption
+APP_BENCH: run the four benchmark
+MICRO_BENCH: run the synthetic benchmark
+PROFILE_MICRO: run the synthetic benchmark and profile
 
+not in used:
+PROFILE_MEMORY_CONSUMPTION: run the four benchmark for SHJ_JM_P, SHJ_JM_P_BATCHED with memory consumption
 SCALE_STUDY: run the four benchmark for SHJ_JM_P, SHJ_JM_P_BATCHED with 1, 2, 4, 8 threads
 PROFILE: profile cache misses
 PROFILE_PMU_COUNTERS: profile PMU counters using pcm
 PROFILE_TOPDOWN: profile intel topdown performance metrics using perf/pcm
 '''
+
+Threads=${3:-8}
+
+export PERF_RESULT_DIR=perf_results
+export PERF_REPORT_DIR=perf_results/reports
+export PERF_LOG_DIR=perf_results/logs
+export PERF_DATA_DIR=perf_results/data
+export PERF_VIS_DIR=perf_results/visualization
+export PERF_TMP_DIR=perf_results/tmp
+export PERF_STAT_DIR=perf_results/stats
+export FLAME_GRAPH_DIR=FlameGraph
+
+mkdir -p ${PERF_RESULT_DIR}
+mkdir -p ${PERF_REPORT_DIR}
+mkdir -p ${PERF_DATA_DIR}
+mkdir -p ${PERF_LOG_DIR}
+mkdir -p ${PERF_VIS_DIR}
+mkdir -p ${PERF_TMP_DIR}
+mkdir -p ${PERF_STAT_DIR}
 
 APP_BENCH=0
 MICRO_BENCH=0
@@ -62,17 +83,17 @@ echo "$exp_dir"
 
 
 # ## Create directories on your machine.
-# mkdir -p $exp_dir/results/breakdown/partition_buildsort_probemerge_join
-# mkdir -p $exp_dir/results/breakdown/partition_only
-# mkdir -p $exp_dir/results/breakdown/partition_buildsort_only
-# mkdir -p $exp_dir/results/breakdown/partition_buildsort_probemerge_only
-# mkdir -p $exp_dir/results/breakdown/allIncludes
+mkdir -p $exp_dir/results/breakdown/partition_buildsort_probemerge_join
+mkdir -p $exp_dir/results/breakdown/partition_only
+mkdir -p $exp_dir/results/breakdown/partition_buildsort_only
+mkdir -p $exp_dir/results/breakdown/partition_buildsort_probemerge_only
+mkdir -p $exp_dir/results/breakdown/allIncludes
 
-# mkdir -p $exp_dir/results/figure
-# mkdir -p $exp_dir/results/gaps
-# mkdir -p $exp_dir/results/latency
-# mkdir -p $exp_dir/results/records
-# mkdir -p $exp_dir/results/timestamps
+mkdir -p $exp_dir/results/figure
+mkdir -p $exp_dir/results/gaps
+mkdir -p $exp_dir/results/latency
+mkdir -p $exp_dir/results/records
+mkdir -p $exp_dir/results/timestamps
 # copy custom pmu events to experiment dir.
 cp pcm* $exp_dir
 # copy cpu mappings to exp_dir
@@ -158,8 +179,90 @@ function benchmarkRun() {
 function KimRun() {
   #####native execution
   echo "==KIM benchmark:$benchmark -a $algo -t $ts -w $WINDOW_SIZE -e $STEP_SIZE -q $STEP_SIZE_S -l $INTERVAL -d $distrbution -z $skew -D $TS_DISTRIBUTION -Z $ZIPF_FACTOR -n $Threads -I $id -W $FIXS -[ $progress_step -] $merge_step -G $group -P $DD -g $gap =="
-  # echo 3 >/proc/sys/vm/drop_caches
+  echo 3 >/proc/sys/vm/drop_caches
   ../hashing -a $algo -t $ts -w $WINDOW_SIZE -e $STEP_SIZE -q $STEP_SIZE_S -l $INTERVAL -d $distrbution -z $skew -D $TS_DISTRIBUTION -Z $ZIPF_FACTOR -n $Threads -I $id -W $FIXS -[ $progress_step -] $merge_step -G $group -P $DD -g $gap
+  if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
+}
+
+function benchmarkPerfRun() {
+  #####native execution
+  echo "==benchmark:$benchmark -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt =="
+  # Clear cache, avoid cache interference of previous round. Need sudo
+  echo 3 >/proc/sys/vm/drop_caches
+  echo "perf stat -d -o ${PERF_RESULT_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_result.txt"
+  echo "../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt"
+
+  perf stat -d -o ${PERF_STAT_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_result.txt  \
+    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap \
+    > ${PERF_LOG_DIR}/${algo}_${benchmark}_THREAD${Threads}_run_log.txt
+
+  if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
+}
+
+function benchmarkFlameGraphRun() {
+  echo "==benchmark:$benchmark -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt =="
+  # Clear cache, avoid cache interference of previous round. Need sudo
+  echo 3 >/proc/sys/vm/drop_caches
+  echo "perf record -F 256 -g --call-graph dwarf -o ${PERF_DATA_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_record_result.data  \
+    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap \
+    > ${PERF_LOG_DIR}/${algo}_${benchmark}_THREAD${Threads}_record_run_log.txt"
+
+  perf record -F 256 -g --call-graph dwarf -o ${PERF_DATA_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_record_result.data  \
+    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap \
+    > ${PERF_LOG_DIR}/${algo}_${benchmark}_THREAD${Threads}_record_run_log.txt
+
+  # after obtaining the results, run the command below to dump binary stack samples
+  echo "perf report --stdio > ${PERF_REPORT_DIR}/${algo}_${benchmark}_THREAD${Threads}_report.txt"
+  perf report --stdio -n > ${PERF_REPORT_DIR}/${algo}_${benchmark}_THREAD${Threads}_report.txt
+
+  if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
+
+}
+
+function KimProfStatRun() {
+  #####native execution
+  echo "==KIM benchmark:$benchmark -a $algo -t $ts -w $WINDOW_SIZE -e $STEP_SIZE -q $STEP_SIZE_S -l $INTERVAL -d $distrbution -z $skew -D $TS_DISTRIBUTION -Z $ZIPF_FACTOR -n $Threads -I $id -W $FIXS -[ $progress_step -] $merge_step -G $group -P $DD -g $gap =="
+  # Clear cache, avoid cache interference of previous round. Need sudo
+  echo 3 >/proc/sys/vm/drop_caches
+
+  # perf record -F 256 -g --call-graph dwarf -o ${PERF_DATA_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_record_result.data  \
+  # ../hashing -a $algo -t $ts -w $WINDOW_SIZE -e $STEP_SIZE -q $STEP_SIZE_S -l $INTERVAL -d $distrbution -z $skew -D $TS_DISTRIBUTION -Z $ZIPF_FACTOR -n $Threads -I $id -W $FIXS -[ $progress_step -] $merge_step -G $group -P $DD -g $gap
+  # > ${PERF_LOG_DIR}/${algo}_${benchmark}_THREAD${Threads}_record_run_log.txt
+
+  # after obtaining the results, run the command below to dump binary stack samples
+  echo "perf stat -d -o ${PERF_STAT_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_result.txt  \
+    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -e $STEP_SIZE -q $STEP_SIZE_S -l $INTERVAL -d $distrbution -z $skew -D $TS_DISTRIBUTION -Z $ZIPF_FACTOR -n $Threads -I $id -W $FIXS -[ $progress_step -] $merge_step -G $group -P $DD -g $gap \
+    > ${PERF_LOG_DIR}/${algo}_${benchmark}_THREAD${Threads}_run_log.txt"
+
+  perf stat -d -o ${PERF_STAT_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_result.txt  \
+    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -e $STEP_SIZE -q $STEP_SIZE_S -l $INTERVAL -d $distrbution -z $skew -D $TS_DISTRIBUTION -Z $ZIPF_FACTOR -n $Threads -I $id -W $FIXS -[ $progress_step -] $merge_step -G $group -P $DD -g $gap \
+    > ${PERF_LOG_DIR}/${algo}_${benchmark}_THREAD${Threads}_run_log.txt
+
+  if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
+}
+
+function KimFlameGraphVisualizeRun() {
+  #####native execution
+  echo "==KIM benchmark:$benchmark -a $algo -t $ts -w $WINDOW_SIZE -e $STEP_SIZE -q $STEP_SIZE_S -l $INTERVAL -d $distrbution -z $skew -D $TS_DISTRIBUTION -Z $ZIPF_FACTOR -n $Threads -I $id -W $FIXS -[ $progress_step -] $merge_step -G $group -P $DD -g $gap =="
+  # Clear cache, avoid cache interference of previous round. Need sudo
+  echo 3 >/proc/sys/vm/drop_caches
+
+  perf record -F 256 -g --call-graph dwarf -o ${PERF_DATA_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_record_result.data  \
+  ../hashing -a $algo -t $ts -w $WINDOW_SIZE -e $STEP_SIZE -q $STEP_SIZE_S -l $INTERVAL -d $distrbution -z $skew -D $TS_DISTRIBUTION -Z $ZIPF_FACTOR -n $Threads -I $id -W $FIXS -[ $progress_step -] $merge_step -G $group -P $DD -g $gap
+  > ${PERF_LOG_DIR}/${algo}_${benchmark}_THREAD${Threads}_record_run_log.txt
+
+  # # after obtaining the results, run the command below to dump binary stack samples
+  echo "perf report --stdio -i ${PERF_DATA_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_record_result.data 
+  > ${PERF_REPORT_DIR}/${algo}_${benchmark}_THREAD${Threads}_report.txt"
+  perf report --stdio -n -i ${PERF_DATA_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_record_result.data > ${PERF_REPORT_DIR}/${algo}_${benchmark}_THREAD${Threads}_report.txt
+  
+  # perf script > ../../../FlameGraph/out.perf
+  # ../../../FlameGraph/stackcollapse-perf.pl out.perf > out.folded
+  # ../../../FlameGraph/flamegraph.pl out.kern_folded > kernel.svg
+  perf script -i ${PERF_DATA_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_record_result.data > ${PERF_TMP_DIR}/__tmp__${algo}_${benchmark}_THREAD${Threads}_perf_script_result_dump.txt
+  ${FLAME_GRAPH_DIR}/stackcollapse-perf.pl ${PERF_TMP_DIR}/__tmp__${algo}_${benchmark}_THREAD${Threads}_perf_script_result_dump.txt > ${PERF_TMP_DIR}/__tmp__stack_fold_${algo}_${benchmark}_THREAD${Threads}_perf_script_result_dump.txt
+  ${FLAME_GRAPH_DIR}/flamegraph.pl ${PERF_TMP_DIR}/__tmp__stack_fold_${algo}_${benchmark}_THREAD${Threads}_perf_script_result_dump.txt > ${PERF_VIS_DIR}/${algo}_${benchmark}_THREAD${Threads}_flame_graph.svg
+
   if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
 }
 
@@ -236,7 +339,7 @@ function ResetParameters() {
   STEP_SIZE_S=128000               # let S has the same arrival rate of R.
   FIXS=1
   ts=1 # stream case
-  Threads=8
+  # Threads=8
   progress_step=20
   merge_step=16 #not in use.
   group=2
@@ -301,40 +404,14 @@ function NORMAL() {
 }
 
 function SHJBENCHRUN() {
-  # PARTITION_ONLY
-  # compile
-  # echo "PARTITION_ONLY"
-  # benchmarkRun
-
-  # PARTITION_BUILD_SORT
-  # compile
-  # echo "PARTITION_BUILD_SORT"
-  # benchmarkRun
-
-  # PARTITION_BUILD_SORT_MERGE_JOIN
-  # compile
-  # echo "PARTITION_BUILD_SORT_MERGE_JOIN"
-  # benchmarkRun
-
   ALL_ON
   compile
   echo "ALL_ON"
-  benchmarkRun
+  # benchmarkRun
+  benchmarkFlameGraphRun
 }
 
-function SHJKIMRUN() {
-  # PARTITION_ONLY
-  # compile
-  # KimRun
-
-  # PARTITION_BUILD_SORT
-  # compile
-  # KimRun
-
-  # PARTITION_BUILD_SORT_MERGE_JOIN
-  # compile
-  # KimRun
-
+function KIMRUN() {
   ALL_ON
   compile
   echo "ALL_ON"
@@ -342,35 +419,22 @@ function SHJKIMRUN() {
 }
 
 function RUNALL() {
-  if [ $profile_breakdown == 1 ]; then
-      SHJBENCHRUN
-  else
-    ALL_ON
-    compile
-    benchmarkRun
-  fi
+  ALL_ON
+  compile
+  benchmarkRun
 }
 
-function RUNALLMic() {
-  if [ $profile_breakdown == 1 ]; then
-    SHJKIMRUN
-  else
-    ALL_ON
-    compile
-    KimRun
-  fi
+function KIMRUNPROF() {
+  ALL_ON
+  compile
+  # KimRum
+  # KimFlameGraphVisualizeRun
+  KimProfStatRun
 }
-
-# ALL_ON
-# compile=1
-# compile
-# SetStockParameters
-# # algo=SHJ_JM_P_BATCHED
-# Threads=4
-# benchmarkRun
 
 #compile once by default.
-# compile
+compile=1
+compile
 # Configurable variables
 # Generate a timestamp
 timestamp=$(date +%Y%m%d-%H%M)
@@ -381,37 +445,35 @@ output=test_shj_$timestamp.txt
 if [ $APP_BENCH == 1 ]; then
   NORMAL
   #compile depends on whether we want to profile.
-  for profile_breakdown in 1; do
-    compile=1
-    for benchmark in "Stock" "Rovio" "YSB" "DEBS"; do # "Stock" "Rovio" "YSB" "DEBS"
-      for algo in SHJ_JM_NP SHJ_JM_P SHJ_JM_P_BATCHED; do 
-        case "$benchmark" in
-        "Stock")
-          id=38
-          ResetParameters
-          SetStockParameters
-          RUNALL
-          ;;
-        "Rovio")
-          id=39
-          ResetParameters
-          SetRovioParameters
-          RUNALL
-          ;;
-        "YSB")
-          id=40
-          ResetParameters
-          SetYSBParameters
-          RUNALL
-          ;;
-        "DEBS")
-          id=41
-          ResetParameters
-          SetDEBSParameters
-          RUNALL
-          ;;
-        esac
-      done
+  compile=0
+  for benchmark in "Stock"; do # "Stock" "Rovio" "YSB" "DEBS"
+    for algo in SHJ_JM_NP SHJ_JM_P SHJ_JM_P_BATCHED; do 
+      case "$benchmark" in
+      "Stock")
+        id=38
+        ResetParameters
+        SetStockParameters
+        RUNALL
+        ;;
+      "Rovio")
+        id=39
+        ResetParameters
+        SetRovioParameters
+        RUNALL
+        ;;
+      "YSB")
+        id=40
+        ResetParameters
+        SetYSBParameters
+        RUNALL
+        ;;
+      "DEBS")
+        id=41
+        ResetParameters
+        SetDEBSParameters
+        RUNALL
+        ;;
+      esac
     done
   done
 fi
@@ -420,36 +482,64 @@ fi
 #MICRO_BENCH=0
 if [ $MICRO_BENCH == 1 ]; then
   NORMAL
-  profile_breakdown=1        # set to 1 if we want to measure time breakdown!
-  compile=$profile_breakdown # compile depends on whether we want to profile.
+  compile=0
   # for benchmark in "AR" "RAR" "AD" "KD" "WS" "DD"; do #
-  for benchmark in "RAR"; do
-    for algo in SHJ_JM_P SHJ_JM_P_BATCHED; do
+  echo test relative arrival rate 5 - 9
+  for benchmark in "FF"; do
+    for algo in SHJ_JM_P SHJ_JM_P_BATCHED SHJ_Shuffle_P_BATCHED SHJ_JB_NP SHJ_JBCR_P; do
       case "$benchmark" in
-      "RAR")
+      "FF")
         id=5
         ## Figure 2
         ResetParameters
         FIXS=1
-        echo test relative arrival rate 5 - 13
         ts=1 # stream case
         WINDOW_SIZE=3000
         # step size should be bigger than nthreads
-        for STEP_SIZE in 1600; do
-          for STEP_SIZE_S in 1600; do
-            #        WINDOW_SIZE=$(expr $DEFAULT_WINDOW_SIZE \* $DEFAULT_STEP_SIZE / $STEP_SIZE) #ensure relation size is the same.
-            echo relation size R is $(expr $WINDOW_SIZE / $INTERVAL \* $STEP_SIZE)
-            echo relation size S is $(expr $WINDOW_SIZE / $INTERVAL \* $STEP_SIZE_S)
-            gap=$(($STEP_SIZE / 500 * $WINDOW_SIZE))
-            RUNALLMic
-            let "id++"
-          done
-        done
+        STEP_SIZE=6400
+        STEP_SIZE_S=6400
+        #        WINDOW_SIZE=$(expr $DEFAULT_WINDOW_SIZE \* $DEFAULT_STEP_SIZE / $STEP_SIZE) #ensure relation size is the same.
+        echo relation size R is $(expr $WINDOW_SIZE / $INTERVAL \* $STEP_SIZE)
+        echo relation size S is $(expr $WINDOW_SIZE / $INTERVAL \* $STEP_SIZE_S)
+        gap=$(($STEP_SIZE / 500 * $WINDOW_SIZE))
+        KIMRUN
+        let "id++"
         ;;
       esac
     done
   done
 fi
+
+## MICRO PROFILE.
+if [ $PROFILE_MICRO == 1 ]; then
+  NORMAL
+  compile=0
+  id=0
+  echo profile kim benchmark fast-fast 0 - 4
+  for benchmark in "FF"; do
+    for algo in SHJ_JM_P SHJ_JM_P_BATCHED SHJ_Shuffle_P_BATCHED SHJ_JB_NP SHJ_JBCR_P; do
+      case "$benchmark" in
+      "FF")
+        ## Figure 2
+        ResetParameters
+        FIXS=1
+        ts=1 # stream case
+        WINDOW_SIZE=3000
+        # step size should be bigger than nthreads
+        STEP_SIZE=6400
+        STEP_SIZE_S=6400
+        #        WINDOW_SIZE=$(expr $DEFAULT_WINDOW_SIZE \* $DEFAULT_STEP_SIZE / $STEP_SIZE) #ensure relation size is the same.
+        echo relation size R is $(expr $WINDOW_SIZE / $INTERVAL \* $STEP_SIZE)
+        echo relation size S is $(expr $WINDOW_SIZE / $INTERVAL \* $STEP_SIZE_S)
+        gap=$(($STEP_SIZE / 500 * $WINDOW_SIZE))
+        KIMRUNPROF
+        let "id++"
+        ;;
+      esac
+    done
+  done
+fi
+
 
 ## SCLAE STUDY
 #SCALE_STUDY=0
@@ -505,8 +595,6 @@ if [ $SCALE_STUDY == 1 ]; then
     done
   done
 fi
-
-## MICRO STUDY
 
 #PROFILE=0 ## Cache misses profiling, please run the program with sudo
 if [ $PROFILE == 1 ]; then
@@ -614,4 +702,3 @@ fi
 # bash draw.sh
 # python3 jobdone.py
 echo "SHJ Experiments All Done"
-
