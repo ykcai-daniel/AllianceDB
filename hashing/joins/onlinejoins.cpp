@@ -40,8 +40,9 @@ t_param &finishing(int nthreads, t_param &param, uint64_t *startTS, param_t *cmd
     int i;
     for (i = 0; i < nthreads; i++) {
         if (param.tid[i] != -1){
+            // MSG("Joining thread %lu: ",param.tid[i])
             pthread_join(param.tid[i], NULL);
-            MSG("Joined thread %lu: ",param.tid[i])
+            // MSG("Joined thread %lu: ",param.tid[i])
         }
 
     }
@@ -228,6 +229,7 @@ SHJ_JM_P_BATCHED(relation_t *relR, relation_t *relS, param_t cmd_params) {
 
 void* shj_shuffle_worker(void* args_void_ptr){
     arg_t* args=(arg_t*) args_void_ptr;
+    MSG("started timer!\n");
     *args->startTS = curtick();
     int lock;
     SHJRoundRobinFetcher left_fetcher(args->tid,args->nthreads,args->relation_left,*args->startTS,args->pool_ptr);
@@ -376,7 +378,7 @@ SHJ_Shuffle_P_BATCHED(relation_t *relR, relation_t *relS, param_t cmd_params){
         fflush(stdout);
     }
     // TODO: add a timer here, need to have global view?
-    startTS = curtick();
+    // startTS = curtick();
     param = finishing(nthreads, param, &startTS, &cmd_params);
 
     return param.joinresult;
