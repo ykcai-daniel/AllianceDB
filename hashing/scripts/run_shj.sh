@@ -3,8 +3,10 @@
 # the script must be run in hashing/scripts !!!
 
 exp_dir="../../data1/xtra"
-exp_secction="MICRO_BENCH"
-ALGOS="SHJ_JB_NP"
+exp_secction="MICRO_BENCH,PROFILE_MICRO" # sections to run, seperated by ','
+ALGOS="SHJ_JB_NP,SHJ_JM_P,SHJ_JM_P_BATCHED,SHJ_Shuffle_P_BATCHED" # algorithms to run, seperated by ','
+Threads=${3:-8}
+compile=${3:-1} #enable compiling.
 '''
 currently suport
 choices of experiment sections:
@@ -20,7 +22,17 @@ PROFILE_PMU_COUNTERS: profile PMU counters using pcm
 PROFILE_TOPDOWN: profile intel topdown performance metrics using perf/pcm
 '''
 
-Threads=${3:-8}
+'''
+{"SHJ_st",      SHJ_st}, /* Symmetric hash join single_thread*/
+{"SHJ_JM_P",    SHJ_JM_P}, /* Symmetric hash join JM Model, Partition*/
+{"SHJ_JM_P_BATCHED",SHJ_JM_P_BATCHED}, /* Symmetric hash join JM Model, Batched*/
+{"SHJ_Shuffle_P_BATCHED",SHJ_Shuffle_P_BATCHED},/* Symetric hash join with hash shuffling, batched*/
+{"SHJ_JM_NP",   SHJ_JM_NP}, /* Symmetric hash join JM Model, No-Partition*/
+{"SHJ_JB_NP",   SHJ_JB_NP}, /* Symmetric hash join JB Model, No-Partition*/
+{"SHJ_JBCR_NP", SHJ_JBCR_NP}, /* Symmetric hash join JB CountRound Model, No-Partition*/
+{"SHJ_JBCR_P",  SHJ_JBCR_P}, /* Symmetric hash join JB CountRound Model, No-Partition*/
+{"SHJ_HS_NP",   SHJ_HS_NP}, /* Symmetric hash join HS Model, No-Partition*/
+'''
 
 export PERF_RESULT_DIR=perf_results
 export PERF_REPORT_DIR=perf_results/reports
@@ -48,9 +60,8 @@ PROFILE_MEMORY_CONSUMPTION=0
 PROFILE_PMU_COUNTERS=0
 PROFILE_TOPDOWN=0
 
-compile=1 #enable compiling.
 eager=1 #enable eager join.
-profile_breakdown=1 # disable measure time breakdown
+profile_breakdown=0 # disable measure time breakdown
 
 
 helpFunction()
@@ -183,41 +194,6 @@ function KimRun() {
   echo 3 >/proc/sys/vm/drop_caches
   ../hashing -a $algo -t $ts -w $WINDOW_SIZE -e $STEP_SIZE -q $STEP_SIZE_S -l $INTERVAL -d $distrbution -z $skew -D $TS_DISTRIBUTION -Z $ZIPF_FACTOR -n $Threads -I $id -W $FIXS -[ $progress_step -] $merge_step -G $group -P $DD -g $gap
   if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
-}
-
-function benchmarkPerfRun() {
-  #####native execution
-  echo "==benchmark:$benchmark -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt =="
-  # Clear cache, avoid cache interference of previous round. Need sudo
-  echo 3 >/proc/sys/vm/drop_caches
-  echo "perf stat -d -o ${PERF_RESULT_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_result.txt"
-  echo "../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt"
-
-  perf stat -d -o ${PERF_STAT_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_result.txt  \
-    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap \
-    > ${PERF_LOG_DIR}/${algo}_${benchmark}_THREAD${Threads}_run_log.txt
-
-  if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
-}
-
-function benchmarkFlameGraphRun() {
-  echo "==benchmark:$benchmark -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap -o $exp_dir/results/breakdown/profile_$id.txt =="
-  # Clear cache, avoid cache interference of previous round. Need sudo
-  echo 3 >/proc/sys/vm/drop_caches
-  echo "perf record -F 256 -g --call-graph dwarf -o ${PERF_DATA_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_record_result.data  \
-    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap \
-    > ${PERF_LOG_DIR}/${algo}_${benchmark}_THREAD${Threads}_record_run_log.txt"
-
-  perf record -F 256 -g --call-graph dwarf -o ${PERF_DATA_DIR}/${algo}_${benchmark}_THREAD${Threads}_perf_record_result.data  \
-    ../hashing -a $algo -t $ts -w $WINDOW_SIZE -r $RSIZE -s $SSIZE -R $RPATH -S $SPATH -J $RKEY -K $SKEY -L $RTS -M $STS -n $Threads -B 1 -t 1 -I $id -[ $progress_step -] $merge_step -G $group -g $gap \
-    > ${PERF_LOG_DIR}/${algo}_${benchmark}_THREAD${Threads}_record_run_log.txt
-
-  # after obtaining the results, run the command below to dump binary stack samples
-  echo "perf report --stdio > ${PERF_REPORT_DIR}/${algo}_${benchmark}_THREAD${Threads}_report.txt"
-  perf report --stdio -n > ${PERF_REPORT_DIR}/${algo}_${benchmark}_THREAD${Threads}_report.txt
-
-  if [[ $? -eq 139 ]]; then echo "oops, sigsegv" exit -1; fi
-
 }
 
 function KimProfStatRun() {
@@ -355,39 +331,6 @@ function ResetParameters() {
 ####### Config shj source file dependency #######
 #################################################
 
-
-function PARTITION_ONLY() {
-  sed -i -e "s/#define JOIN/#define NO_JOIN/g" ../joins/common_functions.h
-  sed -i -e "s/#define MERGE/#define NO_MERGE/g" ../joins/common_functions.h
-  sed -i -e "s/#define MATCH/#define NO_MATCH/g" ../joins/common_functions.h
-  sed -i -e "s/#define WAIT/#define NO_WAIT/g" ../joins/common_functions.h
-  sed -i -e "s/#define OVERVIEW/#define NO_OVERVIEW/g" ../joins/common_functions.h
-}
-
-function PARTITION_BUILD_SORT() {
-  sed -i -e "s/#define NO_JOIN/#define JOIN/g" ../joins/common_functions.h
-  sed -i -e "s/#define MERGE/#define NO_MERGE/g" ../joins/common_functions.h
-  sed -i -e "s/#define MATCH/#define NO_MATCH/g" ../joins/common_functions.h
-  sed -i -e "s/#define WAIT/#define NO_WAIT/g" ../joins/common_functions.h
-  sed -i -e "s/#define OVERVIEW/#define NO_OVERVIEW/g" ../joins/common_functions.h
-}
-
-function PARTITION_BUILD_SORT_MERGE() {
-  sed -i -e "s/#define NO_JOIN/#define JOIN/g" ../joins/common_functions.h
-  sed -i -e "s/#define NO_MERGE/#define MERGE/g" ../joins/common_functions.h
-  sed -i -e "s/#define MATCH/#define NO_MATCH/g" ../joins/common_functions.h
-  sed -i -e "s/#define WAIT/#define NO_WAIT/g" ../joins/common_functions.h
-  sed -i -e "s/#define OVERVIEW/#define NO_OVERVIEW/g" ../joins/common_functions.h
-}
-
-function PARTITION_BUILD_SORT_MERGE_JOIN() {
-  sed -i -e "s/#define NO_JOIN/#define JOIN/g" ../joins/common_functions.h
-  sed -i -e "s/#define NO_MERGE/#define MERGE/g" ../joins/common_functions.h
-  sed -i -e "s/#define NO_MATCH/#define MATCH/g" ../joins/common_functions.h
-  sed -i -e "s/#define WAIT/#define NO_WAIT/g" ../joins/common_functions.h
-  sed -i -e "s/#define OVERVIEW/#define NO_OVERVIEW/g" ../joins/common_functions.h
-}
-
 function ALL_ON() {
   sed -i -e "s/#define NO_JOIN/#define JOIN/g" ../joins/common_functions.h
   sed -i -e "s/#define NO_MERGE/#define MERGE/g" ../joins/common_functions.h
@@ -404,12 +347,10 @@ function NORMAL() {
   sed -i -e "s/#define PROFILE_MEMORY_CONSUMPTION/#define NO_PROFILE_MEMORY_CONSUMPTION/g" ../joins/common_functions.h
 }
 
-function SHJBENCHRUN() {
+function RUNALL() {
   ALL_ON
   compile
-  echo "ALL_ON"
-  # benchmarkRun
-  benchmarkFlameGraphRun
+  benchmarkRun
 }
 
 function KIMRUN() {
@@ -419,23 +360,15 @@ function KIMRUN() {
   KimRun
 }
 
-function RUNALL() {
-  ALL_ON
-  compile
-  benchmarkRun
-}
-
 function KIMRUNPROF() {
   ALL_ON
   compile
-  # KimRum
   KimFlameGraphVisualizeRun
-  # KimProfStatRun
+  KimProfStatRun
 }
 
 #compile once by default.
 # compile=1
-compile
 # Configurable variables
 # Generate a timestamp
 timestamp=$(date +%Y%m%d-%H%M)
@@ -448,7 +381,8 @@ if [ $APP_BENCH == 1 ]; then
   #compile depends on whether we want to profile.
   compile=0
   for benchmark in "Stock"; do # "Stock" "Rovio" "YSB" "DEBS"
-    for algo in SHJ_JM_NP SHJ_JM_P SHJ_JM_P_BATCHED; do 
+    IFS=','
+    for algo in $(echo "$ALGOS"); do
       case "$benchmark" in
       "Stock")
         id=38
@@ -517,9 +451,10 @@ if [ $PROFILE_MICRO == 1 ]; then
   NORMAL
   compile=0
   id=0
-  echo profile kim benchmark fast-fast 0 - 4
+  # echo profile kim benchmark fast-fast 0 - 4
   for benchmark in "FF"; do
-    for algo in SHJ_Shuffle_P_BATCHED; do
+    IFS=','
+    for algo in $(echo "$ALGOS"); do
       case "$benchmark" in
       "FF")
         ## Figure 2
@@ -535,7 +470,7 @@ if [ $PROFILE_MICRO == 1 ]; then
         echo relation size S is $(expr $WINDOW_SIZE / $INTERVAL \* $STEP_SIZE_S)
         gap=$(($STEP_SIZE / 500 * $WINDOW_SIZE))
         KIMRUNPROF
-        let "id++"
+        # let "id++"
         ;;
       esac
     done
@@ -547,7 +482,7 @@ fi
 #SCALE_STUDY=0
 if [ $SCALE_STUDY == 1 ]; then
   NORMAL
-  profile_breakdown=0                                                                     #compile depends on whether we want to profile.
+  profile_breakdown=0
   compile=0
   # general benchmark.
   for algo in SHJ_JM_P, SHJ_JM_P_BATCHED; do
