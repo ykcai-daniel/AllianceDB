@@ -1,4 +1,7 @@
 # script for downloading dataset and installing dependencies
+# may need first add execute permission:
+# chmod +x setup.sh
+
 wget https://www.dropbox.com/s/64z4xtpyhhmhojp/datasets.tar.gz
 tar -zvxf datasets.tar.gz
 rm datasets.tar.gz
