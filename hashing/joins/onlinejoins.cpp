@@ -232,8 +232,8 @@ void* shj_shuffle_worker(void* args_void_ptr){
     MSG("started timer!\n");
     *args->startTS = curtick();
     int lock;
-    SHJRoundRobinFetcher left_fetcher(args->tid,args->nthreads,args->relation_left,*args->startTS);
-    SHJRoundRobinFetcher right_fetcher(args->tid,args->nthreads,args->relation_right,*args->startTS);
+    SHJRoundRobinFetcher left_fetcher(args->tid,args->nthreads,args->relation_left,*args->startTS,args->pool_ptr);
+    SHJRoundRobinFetcher right_fetcher(args->tid,args->nthreads,args->relation_right,*args->startTS,args->pool_ptr);
     SHJShuffleQueueGroup* left_shuffle_group=args->left_group_shared_ptr;
     SHJShuffleQueueGroup* right_shuffle_group=args->right_group_shared_ptr;
     baseJoiner* joiner=args->joiner;
@@ -247,11 +247,13 @@ void* shj_shuffle_worker(void* args_void_ptr){
 #endif
 
     BARRIER_ARRIVE(args->barrier, lock)
+    MSG("All worker ready start join")
 
-    optional<Batch> left_batch;
-    optional<Batch> right_batch;
+    optional<Batch> left_batch=nullopt;
+    optional<Batch> right_batch=nullopt;
     bool left_done=false;
     bool right_done=false;
+    int loop_iterations=0;
     while((!left_shuffle_group->done(args->tid))||(!right_shuffle_group->done(args->tid))){
         // pull and shuffle
 
@@ -259,7 +261,7 @@ void* shj_shuffle_worker(void* args_void_ptr){
         if(!left_fetcher.done()){
             left_batch=left_fetcher.fetch_batch();
             if(left_batch!=nullopt){
-                left_shuffle_group->push_batch(std::move(left_batch.value()));
+                left_shuffle_group->push_batch(std::move(left_batch.value()),args->tid);
             }
         }
         if((!left_done)&&left_fetcher.done()){
@@ -270,7 +272,7 @@ void* shj_shuffle_worker(void* args_void_ptr){
         if(!right_fetcher.done()){
             right_batch=right_fetcher.fetch_batch();
             if(right_batch!=nullopt){
-                right_shuffle_group->push_batch(std::move(right_batch.value()));
+                right_shuffle_group->push_batch(std::move(right_batch.value()),args->tid);
             }
         }
 
@@ -295,7 +297,9 @@ void* shj_shuffle_worker(void* args_void_ptr){
                 joiner->join_batched(args->tid,&right_batch.value(),true,args->matches,chainedbuf);
             }
         }
+        loop_iterations++;
     }
+    MSG("Joiner ended %d",args->tid)
     pthread_exit(NULL);
 
 
@@ -316,13 +320,21 @@ SHJ_Shuffle_P_BATCHED(relation_t *relR, relation_t *relS, param_t cmd_params){
 #endif
 
     // a queue group to be shared for all threads
-    SHJShuffleQueueGroup left_group{cmd_params.nthreads};
-    SHJShuffleQueueGroup right_group{cmd_params.nthreads};
+
+
 
     t_param param(nthreads);
+    // do not allocate object manually with "new"!
     vector<SHJJoiner> joiners;
-    joiners.reserve(nthreads);
+    joiners.reserve(cmd_params.nthreads);
     initialize(nthreads, param);
+    vector<Batch::BatchMemoryPool> pools;
+    pools.reserve(cmd_params.nthreads);
+    for(int t=0;t<cmd_params.nthreads;t++){
+        pools.emplace_back();
+    }
+    SHJShuffleQueueGroup left_group{cmd_params.nthreads,pools};
+    SHJShuffleQueueGroup right_group{cmd_params.nthreads,pools};
 
     for (i = 0; i < cmd_params.nthreads; i++) {
         int cpu_idx = get_cpu_id(i);
@@ -352,6 +364,7 @@ SHJ_Shuffle_P_BATCHED(relation_t *relR, relation_t *relS, param_t cmd_params){
         param.args[i].threadresult = &(param.joinresult->resultlist[i]);
         param.args[i].startTS = &startTS;
         param.args[i].exp_id = param.exp_id;
+        param.args[i].pool_ptr=&pools[i];
 
         param.args[i].left_group_shared_ptr=&left_group;
         param.args[i].right_group_shared_ptr=&right_group;

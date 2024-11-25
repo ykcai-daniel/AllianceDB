@@ -1,26 +1,45 @@
 #pragma once
 
 #include "../utils/types.h"
-// TODO memory pool
+#include "memory_pool.h"
+
 class Batch{
+public:
+    constexpr static int default_size=256;
+    using BatchMemoryPool=MemoryPool<int32_t ,256*default_size,default_size>;
+
+private:
 
     int size_;
-    constexpr static int default_size=4096;
+
 
     // debugging field
     int batch_cnt_;
 
+    BatchMemoryPool* memory_pool_;
+
 
 
 public:
-    intkey_t* keys_;
-    value_t* values_;
+
+
+    int32_t* keys_;
+    int32_t* values_;
 
     static inline int max_size(){
         return default_size;
     }
 
-    explicit Batch():size_(0),batch_cnt_(0){
+//    explicit Batch(){
+//        size_=0;
+//        batch_cnt_=0;
+//        memory_pool_= nullptr;
+//        keys_= nullptr;
+//        values_= nullptr;
+//    }
+
+
+    explicit Batch(BatchMemoryPool* pool_ptr):size_(0),batch_cnt_(0),memory_pool_(pool_ptr){
         allocate();
     }
 
@@ -36,6 +55,7 @@ public:
         batch.batch_cnt_=0;
         batch.keys_= nullptr;
         batch.values_= nullptr;
+        memory_pool_=batch.memory_pool_;
     }
 
     Batch& operator=(Batch&& batch){
@@ -45,6 +65,7 @@ public:
         size_=batch.size_;
         batch.keys_= nullptr;
         batch.values_= nullptr;
+        memory_pool_=batch.memory_pool_;
         return *this;
     }
 
@@ -75,8 +96,18 @@ public:
     // called after moved
     inline void allocate(){
         size_=0;
-        keys_= (intkey_t*)malloc(default_size*sizeof(intkey_t));
-        values_ =(value_t*)malloc(default_size*sizeof(value_t));
+        keys_=memory_pool_->allocate();
+        values_=memory_pool_->allocate();
+    }
+
+    __always_inline
+    key_t* keys() const{
+        return keys_;
+    }
+
+    __always_inline
+    value_t * values() const{
+        return values_;
     }
 
     inline void reset(){
@@ -90,9 +121,14 @@ public:
         return batch_cnt_;
     }
     ~Batch(){
-        free(keys_);
-        free(values_);
+        // memory pool release all memory after join end
+//        memory_pool_->deallocate(keys_);
+//        memory_pool_->deallocate(values_);
     }
 
 };
+
+
+
+
 

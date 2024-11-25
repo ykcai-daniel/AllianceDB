@@ -184,8 +184,10 @@ void *THREAD_TASK_NOSHUFFLE_BATCHED(void *param) {
     }
     BARRIER_ARRIVE(args->barrier, lock)
 #endif
-    Batch batch_r;
-    Batch batch_s;
+    Batch::BatchMemoryPool pool;
+    Batch batch_r(&pool);
+    Batch batch_s(&pool);
+
     do {
         fetch_t *fetch = fetcher->next_tuple(); /*time to fetch, waiting time*/
         if(fetch->ISTuple_R){
