@@ -5,6 +5,7 @@ rm datasets.tar.gz
 mkdir -p ../../data1/xtra
 mv  datasets ../../data1/xtra
 
+sudo apt update
 sudo apt install -y cmake
 # do not install latex related packages
 # sudo apt install -y texlive-fonts-recommended texlive-fonts-extra

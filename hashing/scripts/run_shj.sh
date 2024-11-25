@@ -3,7 +3,8 @@
 # the script must be run in hashing/scripts !!!
 
 exp_dir="../../data1/xtra"
-exp_secction="PROFILE_MICRO"
+exp_secction="MICRO_BENCH"
+ALGOS="SHJ_JB_NP"
 '''
 currently suport
 choices of experiment sections:
@@ -342,7 +343,7 @@ function ResetParameters() {
   # Threads=8
   progress_step=20
   merge_step=16 #not in use.
-  group=2
+  group=1
   gap=12800
   DD=1
   sed -i -e "s/scalarflag [[:alnum:]]*/scalarflag 0/g" ../helper/sort_common.h
@@ -428,12 +429,12 @@ function KIMRUNPROF() {
   ALL_ON
   compile
   # KimRum
-  # KimFlameGraphVisualizeRun
-  KimProfStatRun
+  KimFlameGraphVisualizeRun
+  # KimProfStatRun
 }
 
 #compile once by default.
-compile=1
+# compile=1
 compile
 # Configurable variables
 # Generate a timestamp
@@ -484,9 +485,9 @@ if [ $MICRO_BENCH == 1 ]; then
   NORMAL
   compile=0
   # for benchmark in "AR" "RAR" "AD" "KD" "WS" "DD"; do #
-  echo test relative arrival rate 5 - 9
   for benchmark in "FF"; do
-    for algo in SHJ_JM_P SHJ_JM_P_BATCHED SHJ_Shuffle_P_BATCHED SHJ_JB_NP SHJ_JBCR_P; do
+    IFS=','
+    for algo in $(echo "$ALGOS"); do
       case "$benchmark" in
       "FF")
         id=5
@@ -510,6 +511,7 @@ if [ $MICRO_BENCH == 1 ]; then
   done
 fi
 
+
 ## MICRO PROFILE.
 if [ $PROFILE_MICRO == 1 ]; then
   NORMAL
@@ -517,7 +519,7 @@ if [ $PROFILE_MICRO == 1 ]; then
   id=0
   echo profile kim benchmark fast-fast 0 - 4
   for benchmark in "FF"; do
-    for algo in SHJ_JM_P SHJ_JM_P_BATCHED SHJ_Shuffle_P_BATCHED SHJ_JB_NP SHJ_JBCR_P; do
+    for algo in SHJ_Shuffle_P_BATCHED; do
       case "$benchmark" in
       "FF")
         ## Figure 2
