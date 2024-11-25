@@ -11,6 +11,12 @@
 #include "../joins/batcher.h"
 #include <list>
 #include <optional>
+
+// need to clone simdprune repo into this dir for selective store operation:
+// git clone https://github.com/lemire/simdprune.git
+#include <immintrin.h>
+#include "simdprune/simdprune.h"
+
 class baseShuffler {
 public:
     int nthreads;
@@ -219,6 +225,89 @@ public:
             hash_loc = batch.keys()[i] % thread_cnt;
             tmp_batches[hash_loc].add_tuple(batch.keys()[i],batch.values()[i]);
         }
+        for(int i=0;i<thread_cnt;i++){
+            if(tmp_batches[i].size()>0){
+                queues[i].enqueue(std::move(tmp_batches[i]));
+            }
+
+        }
+    }
+
+    std::optional<Batch> pull_batch(int thread_id){
+        auto& queue=queues[thread_id];
+        Batch b(memory_pool_ptrs_[thread_id]);
+        bool success=queue.try_dequeue(b);
+        if(success&&b.size()!=0){
+            return make_optional<Batch>(std::move(b));
+        }
+        return std::nullopt;
+    }
+
+    void fetcher_done(){
+        done_cnt++;
+    }
+
+    bool done(int thread_id){
+        return done_cnt==thread_cnt&&queues[thread_id].size_approx()==0;
+    }
+
+};
+
+class SIMDShuffleGroup{
+private:
+    uint32_t thread_cnt;
+    vector<moodycamel::ConcurrentQueue<Batch>> queues;
+    vector<Batch::BatchMemoryPool*> memory_pool_ptrs_;
+    atomic<int> done_cnt;
+
+
+public:
+    explicit SIMDShuffleGroup(uint32_t thread_cnt, vector<Batch::BatchMemoryPool>& memory_pools):thread_cnt(thread_cnt){
+        for(int i=0;i<thread_cnt;i++){
+            memory_pool_ptrs_.push_back(&memory_pools[i]);
+        }
+        done_cnt=0;
+        queues.resize(thread_cnt);
+    }
+
+    void push_batch(Batch&& batch,int tid){
+        vector<Batch> tmp_batches;
+        tmp_batches.reserve(thread_cnt);
+        for(int i=0;i<thread_cnt;i++){
+            // to avoid sync of memory allocation, a thread will allocate new batches in its own memory pool
+            tmp_batches.emplace_back(memory_pool_ptrs_[tid]);
+        }
+
+        __m256i thread_num_vec;
+        int index;
+        for(int t=0;t<thread_cnt;t++){
+            thread_num_vec = _mm256_set1_epi32(t);
+            index=0;
+            // TODO: edge case: batch size not multiple of 8
+            for (int i = 0; i < batch.size(); i += 8) {
+                // Load 8 integers from the array
+                __m256i data = _mm256_loadu_si256((__m256i*)(batch.keys() + i));
+
+                // Use bit manipulation to compute mod, thread count must be power of 2
+                __m256i mod_result = _mm256_and_si256(data, _mm256_set1_epi32(thread_cnt - 1));
+
+                // Compare the modulo result with the target value
+                __m256i cmp_result = _mm256_cmpeq_epi32(mod_result, thread_num_vec);
+
+                // Convert the comparison result to a mask
+                int mask = _mm256_movemask_epi8(cmp_result);
+
+                // use left pack to remove unwanted data for shuffle
+                __m256i prune_result = prune256_epi32(data,mask);
+                // write to the new batch
+                _mm256_storeu_si256((__m256i*)tmp_batches[t].keys()+index,prune_result);
+                // increment next write location according to none-0 elements in mask
+                index += _mm_popcnt_u32(mask);
+            }
+
+        }
+
+
         for(int i=0;i<thread_cnt;i++){
             if(tmp_batches[i].size()>0){
                 queues[i].enqueue(std::move(tmp_batches[i]));
