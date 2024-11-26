@@ -10,7 +10,7 @@ public:
 
 private:
 
-    int size_;
+
 
 
     // debugging field
@@ -25,6 +25,7 @@ public:
 
     int32_t* keys_;
     int32_t* values_;
+    int size_;
 
     static inline int max_size(){
         return default_size;

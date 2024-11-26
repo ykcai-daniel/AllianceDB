@@ -33,8 +33,8 @@ struct arg_t {
     // special fields for fetching and shuffling
     relation_t* relation_left;
     relation_t* relation_right;
-    SHJShuffleQueueGroup* left_group_shared_ptr;
-    SHJShuffleQueueGroup* right_group_shared_ptr;
+    SIMDShuffleGroup* left_group_shared_ptr;
+    SIMDShuffleGroup* right_group_shared_ptr;
     Batch::BatchMemoryPool* pool_ptr;
 
 

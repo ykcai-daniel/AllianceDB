@@ -14,6 +14,7 @@
 
 // need to clone simdprune repo into this dir for selective store operation:
 // git clone https://github.com/lemire/simdprune.git
+#include <bitset>
 #include <immintrin.h>
 #include "simdprune/simdprune.h"
 
@@ -259,7 +260,7 @@ private:
     vector<moodycamel::ConcurrentQueue<Batch>> queues;
     vector<Batch::BatchMemoryPool*> memory_pool_ptrs_;
     atomic<int> done_cnt;
-
+    friend Batch;
 
 public:
     explicit SIMDShuffleGroup(uint32_t thread_cnt, vector<Batch::BatchMemoryPool>& memory_pools):thread_cnt(thread_cnt){
@@ -271,6 +272,7 @@ public:
     }
 
     void push_batch(Batch&& batch,int tid){
+        MSG("Input batch size: %d",batch.size())
         vector<Batch> tmp_batches;
         tmp_batches.reserve(thread_cnt);
         for(int i=0;i<thread_cnt;i++){
@@ -279,37 +281,40 @@ public:
         }
 
         __m256i thread_num_vec;
-        int index;
+        MSG("Start SIMD Shuffle")
         for(int t=0;t<thread_cnt;t++){
             thread_num_vec = _mm256_set1_epi32(t);
-            index=0;
-            // TODO: edge case: batch size not multiple of 8
-            for (int i = 0; i < batch.size(); i += 8) {
+            int i;
+            for (i = 0; i < batch.size()/8; i++) {
                 // Load 8 integers from the array
-                __m256i data = _mm256_loadu_si256((__m256i*)(batch.keys() + i));
+                __m256i data = _mm256_loadu_si256((__m256i*)(batch.keys() + i*8));
 
-                // Use bit manipulation to compute mod, thread count must be power of 2
+                // SIMD do not support mod Use bit manipulation to compute mod, thread count must be power of 2
                 __m256i mod_result = _mm256_and_si256(data, _mm256_set1_epi32(thread_cnt - 1));
 
                 // Compare the modulo result with the target value
                 __m256i cmp_result = _mm256_cmpeq_epi32(mod_result, thread_num_vec);
 
                 // Convert the comparison result to a mask
-                int mask = _mm256_movemask_epi8(cmp_result);
+                int mask = _mm256_movemask_ps(cmp_result);
 
                 // use left pack to remove unwanted data for shuffle
                 __m256i prune_result = prune256_epi32(data,mask);
                 // write to the new batch
-                _mm256_storeu_si256((__m256i*)tmp_batches[t].keys()+index,prune_result);
+                _mm256_storeu_si256((__m256i*)(tmp_batches[t].keys()+tmp_batches[t].size_),prune_result);
                 // increment next write location according to none-0 elements in mask
-                index += _mm_popcnt_u32(mask);
+                tmp_batches[i].size_+=_mm_popcnt_u32(mask);
             }
-
+        }
+        MSG("SIMD Shuffle Done")
+        for (int j = (batch.size()/8)*8;j<batch.size(); j++){
+            tmp_batches[batch.keys()[j]%thread_cnt].add_tuple(batch.keys()[j],batch.values()[j]);
         }
 
 
         for(int i=0;i<thread_cnt;i++){
             if(tmp_batches[i].size()>0){
+                MSG("Created batch size: %d",tmp_batches[i].size())
                 queues[i].enqueue(std::move(tmp_batches[i]));
             }
 

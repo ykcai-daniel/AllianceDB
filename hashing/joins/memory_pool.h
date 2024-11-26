@@ -1,4 +1,5 @@
 #pragma once
+#include <stdlib.h>
 
 // allocate len: how many T slots to allocate
 template<class T, size_t AllocLen,size_t ArrayLen=1>
@@ -30,7 +31,7 @@ public:
 
     T* allocate(){
         if(next_pos>=end_pos){
-            T* mem=new T[AllocLen];
+            T* mem= (T*) aligned_alloc(8,AllocLen*sizeof(T));
             memory.push_back(mem);
             next_pos=mem+ArrayLen;
             end_pos=mem+AllocLen;
@@ -43,7 +44,7 @@ public:
 
     ~MemoryPool(){
         for(auto i=memory.begin();i!=memory.end();i++){
-            delete[] *i;
+            free(*i);
         }
     };
 
