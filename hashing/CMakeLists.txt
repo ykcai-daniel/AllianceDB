@@ -38,7 +38,7 @@ SET(CMAKE_CXX_FLAGS_RELEASE "-O3")
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -pthread -msse4.2")
 
 # suppress warning for simdprune permutation file map
-string(APPEND CMAKE_CXX_FLAGS " -Wno-c++11-narrowing")
+string(APPEND CMAKE_CXX_FLAGS " -Wno-c++11-narrowing -Wno-narrowing")
 # additional flags for simdprune
 add_compile_definitions(__AVX2__)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -mbmi2 -mavx2")

@@ -296,14 +296,16 @@ public:
                 __m256i cmp_result = _mm256_cmpeq_epi32(mod_result, thread_num_vec);
 
                 // Convert the comparison result to a mask
-                int mask = _mm256_movemask_ps(cmp_result);
+                // Note: movemask_ps works for float, but since int and float are both 32 bits
+                // it can me used to move __m256i masks after casting
+                int mask = _mm256_movemask_ps(_mm256_castsi256_ps(cmp_result));
 
                 // use left pack to remove unwanted data for shuffle
                 __m256i prune_result = prune256_epi32(data,mask);
                 // write to the new batch
                 _mm256_storeu_si256((__m256i*)(tmp_batches[t].keys()+tmp_batches[t].size_),prune_result);
                 // increment next write location according to none-0 elements in mask
-                tmp_batches[i].size_+=_mm_popcnt_u32(mask);
+                tmp_batches[t].size_+=_mm_popcnt_u32(mask);
             }
         }
         MSG("SIMD Shuffle Done")
