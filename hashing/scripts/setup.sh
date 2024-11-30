@@ -24,8 +24,9 @@ sudo apt install -y linux-tools-common
 sudo apt install -y linux-tools-$(uname -r) # XXX is the kernel version of your linux, use uname -r to check it. e.g. 4.15.0-91-generic
 sudo echo -1 > /proc/sys/kernel/perf_event_paranoid # if permission denied, try to run this at root user.
 sudo modprobe msr
-# clone flame graph maker
 
-# clone simdprune in helper
 cd ../helper
+# clone flame graph maker
 git clone https://github.com/brendangregg/FlameGraph.git
+# clone simdprune in helper
+git clone https://github.com/lemire/simdprune.git
