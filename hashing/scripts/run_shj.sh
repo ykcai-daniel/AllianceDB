@@ -3,10 +3,10 @@
 # the script must be run in hashing/scripts !!!
 
 exp_dir="../../data1/xtra"
-exp_secction="MICRO_BENCH,PROFILE_MICRO" # sections to run, seperated by ','
-ALGOS="SHJ_JB_NP,SHJ_JM_P,SHJ_JM_P_BATCHED,SHJ_Shuffle_P_BATCHED" # algorithms to run, seperated by ','
-Threads=${3:-8}
-compile=${3:-1} #enable compiling.
+exp_secction="MICRO_BENCH" # sections to run, seperated by ','
+ALGOS="SHJ_JM_P" # algorithms to run, seperated by ','
+compile=${1:-1} #enable compiling.
+Threads=${2:-8}
 '''
 currently suport
 choices of experiment sections:
@@ -368,7 +368,7 @@ function KIMRUNPROF() {
 }
 
 #compile once by default.
-# compile=1
+compile
 # Configurable variables
 # Generate a timestamp
 timestamp=$(date +%Y%m%d-%H%M)
